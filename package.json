@@ -1,0 +1,8 @@
+{
+  "name": "messenger-puppeteer-bot",
+  "version": "1.0.0",
+  "dependencies": {
+    "puppeteer": "^22.0.0",
+    "axios": "^1.6.0"
+  }
+}
