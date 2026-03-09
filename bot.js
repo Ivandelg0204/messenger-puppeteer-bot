@@ -5,7 +5,7 @@ const fs = require("fs");
 
 puppeteer.use(StealthPlugin());
 
-const WEBHOOK = "https://n8n-n8n.owlzof.easypanel.host/webhook/messenger
+const WEBHOOK = "https://n8n-n8n.owlzof.easypanel.host/webhook/messenger"
 ";
 const SESSION_FILE = "session.json";
 
