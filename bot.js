@@ -5,68 +5,67 @@ const N8N_WEBHOOK = "https://n8n-n8n.owlzof.easypanel.host/webhook/messenger";
 
 (async () => {
 
-const puppeteer = require("puppeteer");
-
-(async () => {
-
   const browser = await puppeteer.launch({
     headless: true,
     args: [
       "--no-sandbox",
       "--disable-setuid-sandbox",
       "--disable-dev-shm-usage",
-      "--disable-gpu"
+      "--disable-gpu",
+      "--no-zygote",
+      "--single-process"
     ]
   });
 
   const page = await browser.newPage();
 
-  await page.goto("https://facebook.com");
+  console.log("Abriendo Facebook...");
 
-  console.log("Browser started");
+  await page.goto("https://www.facebook.com/messages", {
+    waitUntil: "networkidle2"
+  });
 
-})();
+  console.log("Inicia sesión manualmente si es necesario...");
 
-const page = await browser.newPage();
+  await page.waitForSelector('[role="main"]', { timeout: 0 });
 
-await page.goto("https://www.facebook.com/messages");
+  console.log("Messenger cargado");
 
-console.log("Inicia sesión manualmente...");
+  setInterval(async () => {
 
-await page.waitForSelector('[role="main"]');
+    try {
 
-console.log("Messenger cargado");
+      const messages = await page.evaluate(() => {
 
-setInterval(async ()=>{
+        const chats = document.querySelectorAll('[data-testid="mwthreadlist-item"]');
 
-const messages = await page.evaluate(()=>{
+        let data = [];
 
-const chats = document.querySelectorAll('[data-testid="mwthreadlist-item"]');
+        chats.forEach(chat => {
+          let name = chat.innerText;
+          data.push(name);
+        });
 
-let data = [];
+        return data;
 
-chats.forEach(chat=>{
+      });
 
-let name = chat.innerText;
+      for (const msg of messages) {
 
-data.push(name);
+        await axios.post(N8N_WEBHOOK, {
+          message: msg
+        });
 
-});
+        console.log("Mensaje enviado a n8n:", msg);
 
-return data;
+      }
 
-});
+    } catch (err) {
 
-for(const msg of messages){
+      console.log("Error leyendo mensajes:", err.message);
 
-await axios.post(N8N_WEBHOOK,{
-message:msg
-});
+    }
 
-console.log("Mensaje enviado a n8n:",msg);
-
-}
-
-},5000);
+  }, 5000);
 
 })();
