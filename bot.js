@@ -1,71 +1,145 @@
-const puppeteer = require("puppeteer");
+const puppeteer = require("puppeteer-extra");
+const StealthPlugin = require("puppeteer-extra-plugin-stealth");
 const axios = require("axios");
+const fs = require("fs");
 
-const N8N_WEBHOOK = "https://n8n-n8n.owlzof.easypanel.host/webhook/messenger";
+puppeteer.use(StealthPlugin());
 
-(async () => {
+const WEBHOOK = "https://n8n-n8n.owlzof.easypanel.host/webhook/messenger";
 
-  const browser = await puppeteer.launch({
-    headless: true,
-    args: [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-dev-shm-usage",
-      "--disable-gpu",
-      "--no-zygote",
-      "--single-process"
-    ]
-  });
+const SESSION_FILE = "session.json";
 
-  const page = await browser.newPage();
+let sentMessages = new Set();
 
-  console.log("Abriendo Facebook...");
+async function loadSession(page){
 
-  await page.goto("https://www.facebook.com/messages", {
-    waitUntil: "networkidle2"
-  });
+if(fs.existsSync(SESSION_FILE)){
 
-  console.log("Inicia sesión manualmente si es necesario...");
+const cookies = JSON.parse(fs.readFileSync(SESSION_FILE));
 
-  await page.waitForSelector('[role="main"]', { timeout: 0 });
+await page.setCookie(...cookies);
 
-  console.log("Messenger cargado");
+console.log("Session loaded");
 
-  setInterval(async () => {
+}
 
-    try {
+}
 
-      const messages = await page.evaluate(() => {
+async function saveSession(page){
 
-        const chats = document.querySelectorAll('[data-testid="mwthreadlist-item"]');
+const cookies = await page.cookies();
 
-        let data = [];
+fs.writeFileSync(SESSION_FILE, JSON.stringify(cookies,null,2));
 
-        chats.forEach(chat => {
-          let name = chat.innerText;
-          data.push(name);
-        });
+console.log("Session saved");
 
-        return data;
+}
 
-      });
+async function start(){
 
-      for (const msg of messages) {
+console.log("Starting Messenger Bot...");
 
-        await axios.post(N8N_WEBHOOK, {
-          message: msg
-        });
+const browser = await puppeteer.launch({
 
-        console.log("Mensaje enviado a n8n:", msg);
+headless:true,
 
-      }
+args:[
+"--no-sandbox",
+"--disable-setuid-sandbox",
+"--disable-dev-shm-usage",
+"--disable-gpu",
+"--no-zygote",
+"--single-process"
+]
 
-    } catch (err) {
+});
 
-      console.log("Error leyendo mensajes:", err.message);
+const page = await browser.newPage();
 
-    }
+await loadSession(page);
 
-  }, 5000);
+console.log("Opening Messenger");
 
-})();
+await page.goto("https://www.facebook.com/messages",{
+
+waitUntil:"networkidle2"
+
+});
+
+try{
+
+await page.waitForSelector('[role="main"]',{timeout:15000});
+
+}catch{
+
+console.log("Login required");
+
+await page.goto("https://www.facebook.com/login");
+
+await page.waitForTimeout(60000);
+
+await saveSession(page);
+
+}
+
+console.log("Messenger Ready");
+
+setInterval(async()=>{
+
+try{
+
+const chats = await page.evaluate(()=>{
+
+const nodes = document.querySelectorAll('[role="row"]');
+
+let data = [];
+
+nodes.forEach(node=>{
+
+const text = node.innerText;
+
+if(text){
+
+data.push(text);
+
+}
+
+});
+
+return data;
+
+});
+
+for(const chat of chats){
+
+if(!sentMessages.has(chat)){
+
+sentMessages.add(chat);
+
+console.log("New lead:",chat);
+
+await axios.post(WEBHOOK,{
+
+lead:chat,
+
+source:"facebook_marketplace",
+
+timestamp:Date.now()
+
+});
+
+}
+
+}
+
+}catch(err){
+
+console.log("Error reading messages:",err.message);
+
+}
+
+},4000);
+
+}
+
+start();
