@@ -12,6 +12,34 @@ let browser;
 let page;
 let sentMessages = new Set();
 
+async function launchBrowser(){
+
+console.log("Launching browser");
+
+browser = await puppeteer.launch({
+
+headless:true,
+
+args:[
+"--no-sandbox",
+"--disable-setuid-sandbox",
+"--disable-dev-shm-usage",
+"--disable-gpu",
+"--disable-features=site-per-process"
+]
+
+});
+
+browser.on("disconnected", async () => {
+
+console.log("Browser crashed → restarting");
+
+await start();
+
+});
+
+}
+
 async function loadSession(){
 
 if(fs.existsSync(SESSION_FILE)){
@@ -40,7 +68,7 @@ async function createPage(){
 
 if(page){
 
-try{ await page.close(); }catch{}
+try{await page.close()}catch{}
 
 }
 
@@ -111,9 +139,7 @@ console.log("New lead:",chat);
 await axios.post(WEBHOOK,{
 
 lead:chat,
-
 source:"facebook_marketplace",
-
 timestamp:Date.now()
 
 });
@@ -124,7 +150,7 @@ timestamp:Date.now()
 
 }catch(err){
 
-console.log("Messenger crashed → recreating page");
+console.log("Page crashed → recreating");
 
 await createPage();
 
@@ -134,24 +160,9 @@ await createPage();
 
 async function start(){
 
-console.log("Starting Messenger Bot...");
+console.log("Starting Messenger Bot");
 
-browser = await puppeteer.launch({
-
-headless:true,
-
-args:[
-
-"--no-sandbox",
-"--disable-setuid-sandbox",
-"--disable-dev-shm-usage",
-"--disable-gpu",
-"--no-zygote",
-"--single-process"
-
-]
-
-});
+await launchBrowser();
 
 await createPage();
 
