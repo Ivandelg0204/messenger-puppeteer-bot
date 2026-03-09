@@ -5,12 +5,14 @@ const fs = require("fs");
 
 puppeteer.use(StealthPlugin());
 
-const WEBHOOK = "https://n8n-n8n.owlzof.easypanel.host/webhook/messenger";
+const WEBHOOK = "https://n8n-n8n.owlzof.easypanel.host/webhook/messenger
+";
 const SESSION_FILE = "session.json";
 
 let browser;
 let page;
-let sentMessages = new Set();
+
+const sentMessages = new Set();
 
 async function launchBrowser(){
 
@@ -20,17 +22,20 @@ browser = await puppeteer.launch({
 
 headless:true,
 
+executablePath:"/usr/bin/chromium",
+
 args:[
 "--no-sandbox",
 "--disable-setuid-sandbox",
 "--disable-dev-shm-usage",
 "--disable-gpu",
-"--disable-features=site-per-process"
+"--disable-features=site-per-process",
+"--disable-background-networking"
 ]
 
 });
 
-browser.on("disconnected", async () => {
+browser.on("disconnected", async()=>{
 
 console.log("Browser crashed → restarting");
 
@@ -64,17 +69,7 @@ console.log("Session saved");
 
 }
 
-async function createPage(){
-
-if(page){
-
-try{await page.close()}catch{}
-
-}
-
-page = await browser.newPage();
-
-await loadSession();
+async function openMessenger(){
 
 await page.goto("https://www.facebook.com/messages",{
 
@@ -90,7 +85,10 @@ await page.waitForSelector('[role="main"]',{timeout:15000});
 
 console.log("Login required");
 
-await page.goto("https://www.facebook.com/login");
+await page.goto("https://www.facebook.com/login
+");
+
+console.log("Waiting for manual login...");
 
 await page.waitForTimeout(60000);
 
@@ -98,75 +96,122 @@ await saveSession();
 
 }
 
-console.log("Messenger Ready");
+console.log("Messenger ready");
 
 }
 
-async function readMessages(){
+async function attachMessageListener(){
 
-try{
+console.log("Attaching real-time listener");
 
-const chats = await page.evaluate(()=>{
+await page.evaluate(()=>{
 
-const nodes = document.querySelectorAll('[role="row"]');
+if(window.MESSENGER_OBSERVER) return;
 
-let data=[];
+window.MESSENGER_OBSERVER = true;
 
-nodes.forEach(node=>{
+window.newMessages = [];
 
-const text=node.innerText;
+const observer = new MutationObserver(()=>{
+
+const messages = document.querySelectorAll('[role="row"]');
+
+messages.forEach(m=>{
+
+const text = m.innerText;
 
 if(text){
 
-data.push(text);
+window.newMessages.push(text);
 
 }
 
 });
+
+});
+
+observer.observe(document.body,{
+childList:true,
+subtree:true
+});
+
+});
+
+}
+
+async function pollMessages(){
+
+const msgs = await page.evaluate(()=>{
+
+const data = [...window.newMessages];
+
+window.newMessages = [];
 
 return data;
 
 });
 
-for(const chat of chats){
+for(const msg of msgs){
 
-if(!sentMessages.has(chat)){
+if(!sentMessages.has(msg)){
 
-sentMessages.add(chat);
+sentMessages.add(msg);
 
-console.log("New lead:",chat);
+console.log("New message detected:",msg);
 
 await axios.post(WEBHOOK,{
-
-lead:chat,
+lead:msg,
 source:"facebook_marketplace",
 timestamp:Date.now()
-
 });
 
 }
 
 }
 
-}catch(err){
+}
 
-console.log("Page crashed → recreating");
+async function createPage(){
 
-await createPage();
+if(page){
+
+try{await page.close()}catch{}
 
 }
+
+page = await browser.newPage();
+
+await loadSession();
+
+await openMessenger();
+
+await attachMessageListener();
 
 }
 
 async function start(){
 
-console.log("Starting Messenger Bot");
+console.log("Starting Messenger SaaS Bot");
 
 await launchBrowser();
 
 await createPage();
 
-setInterval(readMessages,4000);
+setInterval(async()=>{
+
+try{
+
+await pollMessages();
+
+}catch(e){
+
+console.log("Page crashed → rebuilding");
+
+await createPage();
+
+}
+
+},3000);
 
 }
 
