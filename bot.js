@@ -5,8 +5,7 @@ const fs = require("fs");
 
 puppeteer.use(StealthPlugin());
 
-const WEBHOOK = "https://n8n-n8n.owlzof.easypanel.host/webhook/messenger"
-";
+const WEBHOOK = "https://n8n-n8n.owlzof.easypanel.host/webhook/messenger";
 const SESSION_FILE = "session.json";
 
 let browser;
@@ -85,8 +84,7 @@ await page.waitForSelector('[role="main"]',{timeout:15000});
 
 console.log("Login required");
 
-await page.goto("https://www.facebook.com/login
-");
+await page.goto("https://www.facebook.com/login");
 
 console.log("Waiting for manual login...");
 
@@ -106,9 +104,9 @@ console.log("Attaching real-time listener");
 
 await page.evaluate(()=>{
 
-if(window.MESSENGER_OBSERVER) return;
+if(window.__MESSENGER_OBSERVER__) return;
 
-window.MESSENGER_OBSERVER = true;
+window.__MESSENGER_OBSERVER__ = true;
 
 window.newMessages = [];
 
