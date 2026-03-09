@@ -8,45 +8,50 @@ puppeteer.use(StealthPlugin());
 const WEBHOOK = "https://n8n-n8n.owlzof.easypanel.host/webhook/messenger";
 const SESSION_FILE = "session.json";
 
-let sentMessages = new Set();
+let browser;
 let page;
+let sentMessages = new Set();
 
-async function loadSession(page){
+async function loadSession(){
+
 if(fs.existsSync(SESSION_FILE)){
+
 const cookies = JSON.parse(fs.readFileSync(SESSION_FILE));
+
 await page.setCookie(...cookies);
+
 console.log("Session loaded");
-}
+
 }
 
-async function saveSession(page){
+}
+
+async function saveSession(){
+
 const cookies = await page.cookies();
+
 fs.writeFileSync(SESSION_FILE, JSON.stringify(cookies,null,2));
+
 console.log("Session saved");
+
 }
 
-async function launchBrowser(){
+async function createPage(){
 
-console.log("Launching browser...");
+if(page){
 
-const browser = await puppeteer.launch({
-headless:true,
-args:[
-"--no-sandbox",
-"--disable-setuid-sandbox",
-"--disable-dev-shm-usage",
-"--disable-gpu",
-"--no-zygote",
-"--single-process"
-]
-});
+try{ await page.close(); }catch{}
+
+}
 
 page = await browser.newPage();
 
-await loadSession(page);
+await loadSession();
 
 await page.goto("https://www.facebook.com/messages",{
+
 waitUntil:"networkidle2"
+
 });
 
 try{
@@ -61,7 +66,7 @@ await page.goto("https://www.facebook.com/login");
 
 await page.waitForTimeout(60000);
 
-await saveSession(page);
+await saveSession();
 
 }
 
@@ -84,7 +89,9 @@ nodes.forEach(node=>{
 const text=node.innerText;
 
 if(text){
+
 data.push(text);
+
 }
 
 });
@@ -102,9 +109,13 @@ sentMessages.add(chat);
 console.log("New lead:",chat);
 
 await axios.post(WEBHOOK,{
+
 lead:chat,
+
 source:"facebook_marketplace",
+
 timestamp:Date.now()
+
 });
 
 }
@@ -113,13 +124,9 @@ timestamp:Date.now()
 
 }catch(err){
 
-console.log("Frame error detected → reloading messenger");
+console.log("Messenger crashed → recreating page");
 
-try{
-await page.reload({waitUntil:"networkidle2"});
-}catch(e){
-console.log("Reload failed");
-}
+await createPage();
 
 }
 
@@ -129,7 +136,24 @@ async function start(){
 
 console.log("Starting Messenger Bot...");
 
-await launchBrowser();
+browser = await puppeteer.launch({
+
+headless:true,
+
+args:[
+
+"--no-sandbox",
+"--disable-setuid-sandbox",
+"--disable-dev-shm-usage",
+"--disable-gpu",
+"--no-zygote",
+"--single-process"
+
+]
+
+});
+
+await createPage();
 
 setInterval(readMessages,4000);
 
